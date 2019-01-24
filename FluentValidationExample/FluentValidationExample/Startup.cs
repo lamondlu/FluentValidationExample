@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -29,31 +30,39 @@ namespace FluentValidationExample
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton<IValidator<User>, UserValidator>();
+            var types = Assembly.GetExecutingAssembly().GetTypes().Where(p => p.BaseType.GetInterfaces().Any(x => x == typeof(IValidator)));
+
+            foreach (var type in types)
+            {
+                var genericType = typeof(IValidator<>).MakeGenericType(type.BaseType.GenericTypeArguments[0]);
+                services.AddSingleton(genericType, type);
+            }
+
+            //services.AddSingleton<IValidator<User>, UserValidator>();
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1)
-                .AddFluentValidation();
+                            .AddFluentValidation();
 
             services.Configure<ApiBehaviorOptions>(options =>
-            {
-                options.InvalidModelStateResponseFactory = (context) =>
-                {
-                    var errors = context.ModelState
-                        .Values
-                        .SelectMany(x => x.Errors
-                                    .Select(p => p.ErrorMessage))
-                        .ToList();
+                        {
+                            options.InvalidModelStateResponseFactory = (context) =>
+                            {
+                                var errors = context.ModelState
+                                    .Values
+                                    .SelectMany(x => x.Errors
+                                                .Select(p => p.ErrorMessage))
+                                    .ToList();
 
-                    var result = new
-                    {
-                        Code = "00009",
-                        Message = "Validation errors",
-                        Errors = errors
-                    };
+                                var result = new
+                                {
+                                    Code = "00009",
+                                    Message = "Validation errors",
+                                    Errors = errors
+                                };
 
-                    return new BadRequestObjectResult(result);
-                };
-            });
+                                return new BadRequestObjectResult(result);
+                            };
+                        });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
